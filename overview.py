@@ -118,7 +118,7 @@ def build_instagram_table(df_8w, df_full, week_codes, week_label_map):
         rows.append({
             "Week":                week_label_map.get(wk, wk),
             "Followers":           f["Last Followers"].dropna().iloc[-1] if not f["Last Followers"].dropna().empty else None,
-            "Followers Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else None,
+            "Followers Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else 0,
             "Total Post":          len(p),
             "Engagement":          p["Engagement"].sum() if not p.empty else None,
             "Reach":               p["Reach"].sum() if not p.empty else None,
@@ -151,7 +151,7 @@ def build_facebook_table(df_8w, df_full, week_codes, week_label_map):
         rows.append({
             "Week":                week_label_map.get(wk, wk),
             "Followers":           f["Last Followers"].dropna().iloc[-1] if not f["Last Followers"].dropna().empty else None,
-            "Followers Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else None,
+            "Followers Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else 0,
             "Total Post":          len(p),
             "Engagement":          p["Engagement"].sum() if not p.empty else None,
             "Reach":               p["Reach"].sum() if not p.empty else None,
@@ -184,7 +184,7 @@ def build_tiktok_table(df_8w, df_full, week_codes, week_label_map):
         rows.append({
             "Week":                week_label_map.get(wk, wk),
             "Followers":           f["Last Followers"].dropna().iloc[-1] if not f["Last Followers"].dropna().empty else None,
-            "Followers Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else None,
+            "Followers Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else 0,
             "Total Post":          len(p),
             "Engagement":          p["Engagement"].sum() if not p.empty else None,
             "Views": p["Impression"].sum() if not p.empty else None,
@@ -215,7 +215,7 @@ def build_linkedin_table(df_8w, df_full, week_codes, week_label_map):
         rows.append({
             "Week":             week_label_map.get(wk, wk),
             "Followers":        f["Last Followers"].dropna().iloc[-1] if not f["Last Followers"].dropna().empty else None,
-            "Followers Growth": f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else None,
+            "Followers Growth": f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else 0,
             "Total Post":       len(p),
             "Engagement":       p["Engagement"].sum() if not p.empty else None,
             "Impression": p["Impression"].sum() if not p.empty else None,
@@ -250,7 +250,7 @@ def build_youtube_table(df_8w, df_full, week_codes, week_label_map):
         rows.append({
             "Week":                week_label_map.get(wk, wk),
             "Subscribers":           f["Last Followers"].dropna().iloc[-1] if not f["Last Followers"].dropna().empty else None,
-            "Subscriber Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else None,
+            "Subscriber Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else 0,
             "Total Post":          len(p),
             "Engagement":          p["Engagement"].sum() if not p.empty else None,
             "Views": p["Impression"].sum() if not p.empty else None,
@@ -306,7 +306,7 @@ def build_twitter_table(df_8w, df_full, week_codes, week_label_map):
         rows.append({
             "Week":                week_label_map.get(wk, wk),
             "Followers":           f["Last Followers"].dropna().iloc[-1] if not f["Last Followers"].dropna().empty else None,
-            "Followers Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else None,
+            "Followers Growth":    f["Growth"].dropna().sum() if not f["Growth"].dropna().empty else 0,
             "Total Post":          len(p),
             "Engagement":          p["Engagement"].sum() if not p.empty else None,
             "Reach":               p["Reach"].sum() if not p.empty else None,
