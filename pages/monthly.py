@@ -46,7 +46,7 @@ except Exception as e:
 today = datetime.today()
 
 # content date
-df["Date"] = pd.to_datetime(df["Date"], infer_datetime_format=True, errors="coerce")
+df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 # followers weekly date
 df["Week_dt"] = pd.to_datetime(
     df["Week_code"].astype(str),
