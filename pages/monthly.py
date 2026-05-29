@@ -987,7 +987,7 @@ def render_engagement_bar_chart(df_filtered, platform_name):
 
 def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
 
-    label_map = {"Reach": "Reach", "Impression": "Impression", "Views": "Views"}
+    label_map    = {"Reach": "Reach", "Impression": "Impression", "Views": "Views"}
     metric_label = label if label else label_map.get(metric, metric)
 
     st.subheader(f"📈 {platform_name} {metric_label}")
@@ -1002,7 +1002,9 @@ def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
         st.warning(f"Tidak ada data {metric_label} untuk {platform_name}")
         return
 
-    df_posts["Week_dt"] = pd.to_datetime(df_posts["Week_code"], dayfirst=True, errors="coerce")
+    df_posts["Week_dt"] = pd.to_datetime(
+        df_posts["Week_code"], dayfirst=True, errors="coerce"
+    )
 
     df_weekly = (
         df_posts.groupby("Week_dt", sort=True)
@@ -1014,9 +1016,25 @@ def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
         st.warning(f"Tidak ada data weekly {metric_label} untuk {platform_name}")
         return
 
-    week_labels = df_weekly["Week_dt"].dt.strftime("%-d %b").tolist()
-    vals        = df_weekly["Value"].fillna(0).astype(int).tolist()
+    # =====================================================
+    # FILL MISSING WEEKS
+    # =====================================================
+    all_weeks = pd.to_datetime(
+        df_filtered["Week_code"].dropna().unique(),
+        dayfirst=True, errors="coerce"
+    )
+    all_weeks   = sorted([w for w in all_weeks if pd.notna(w)])
+    df_all_weeks = pd.DataFrame({"Week_dt": all_weeks})
 
+    df_weekly = pd.merge(df_all_weeks, df_weekly, on="Week_dt", how="left")
+    df_weekly["Value"] = df_weekly["Value"].fillna(0).astype(int)
+
+    week_labels = [f"Week {i+1}" for i in range(len(df_weekly))]
+    vals        = df_weekly["Value"].tolist()
+
+    # =====================================================
+    # CHART
+    # =====================================================
     fig, ax = plt.subplots(figsize=(9, 4))
 
     ax.plot(week_labels, vals, color="#4A90D9", linewidth=2.5, marker="o",
@@ -1030,7 +1048,7 @@ def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
     ax.fill_between(range(len(week_labels)), vals, alpha=0.1, color="#4A90D9")
 
     ax.set_xticks(range(len(week_labels)))
-    ax.set_xticklabels([f"Week {i+1}" for i in range(len(week_labels))], fontsize=9)
+    ax.set_xticklabels(week_labels, fontsize=9)
     ax.set_ylabel(f"{platform_name} {metric_label}", fontsize=9)
     ax.set_title(metric_label, fontsize=11, fontweight="bold", pad=10)
     ax.spines["top"].set_visible(False)
@@ -1043,7 +1061,6 @@ def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
     plt.close()
     buf.seek(0)
     st.image(buf, use_container_width=True)
-    
 # =========================================================
 # INSTAGRAM
 # =========================================================
