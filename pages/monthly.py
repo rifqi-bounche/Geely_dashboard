@@ -604,20 +604,18 @@ def render_followers_chart(df_full, platform_name):
     if df_followers.empty:
         st.warning(f"Tidak ada Week_code valid untuk {platform_name}")
         return
-
+    
     # =====================================================
-    # FILTER BY DATE RANGE (overlap logic)
+    # FILTER BY DATE RANGE
+    # Week_code = END OF WEEK (Sunday)
     # =====================================================
-    df_followers["week_end"] = df_followers["Week_dt"] + pd.Timedelta(days=6)
-
     selected_start = pd.to_datetime(start_date).normalize()
     selected_end   = pd.to_datetime(end_date).normalize()
 
     df_followers = df_followers[
-        (df_followers["week_end"].dt.normalize() >= selected_start) &
+        (df_followers["Week_dt"].dt.normalize() >= selected_start) &
         (df_followers["Week_dt"].dt.normalize() <= selected_end)
     ]
-
     if df_followers.empty:
         st.warning(f"Tidak ada data followers untuk {platform_name} di periode ini.")
         return
