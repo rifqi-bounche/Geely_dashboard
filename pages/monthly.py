@@ -128,25 +128,21 @@ def build_monthly_table(df_full, platform_name):
     if "Reach" in merged.columns:
         merged["Reach"] = merged["Reach"].fillna(0)
 
-    # ER / View Rate
+    # ER
     if is_tiktok or is_youtube:
-        if "Watch_Rate" in merged.columns:
-            merged["View Rate"] = merged["Watch_Rate"].fillna(0).apply(lambda x: f"{float(str(x).replace('%','').strip()) if isinstance(x, str) else x:.2f}%")
-            merged = merged.drop(columns=["Watch_Rate"])
-        else:
-            merged["View Rate"] = (merged["Engagement"] / merged["Followers"].replace(0, pd.NA) * 100).round(2)
-            merged["View Rate"] = merged["View Rate"].fillna(0).apply(lambda x: f"{x:.2f}%")
+        merged["ER"] = (merged["Engagement"] / merged["Impression"].replace(0, pd.NA) * 100).round(2)
+        merged["ER"] = merged["ER"].fillna(0).apply(lambda x: f"{x:.2f}%")
     else:
         if "Reach" in merged.columns and merged["Reach"].replace(0, pd.NA).notna().any():
             merged["ER"] = (merged["Engagement"] / merged["Reach"].replace(0, pd.NA) * 100).round(2)
         else:
             merged["ER"] = (merged["Engagement"] / merged["Impression"].replace(0, pd.NA) * 100).round(2)
         merged["ER"] = merged["ER"].fillna(0).apply(lambda x: f"{x:.2f}%")
+
     # Format numbers
     for col in ["Post_Amount", "Followers", "Growth", "Reach", "Impression", "Engagement"]:
         if col in merged.columns:
             merged[col] = merged[col].apply(lambda x: f"{int(float(str(x).replace(',', ''))):,}" if pd.notna(x) else "0")
-
     # Rename
     merged = merged.rename(columns={
         "Post_Amount": "Total Post",
@@ -159,7 +155,7 @@ def build_monthly_table(df_full, platform_name):
 
     # Column order
     if is_tiktok or is_youtube:
-        col_order = ["Followers", "Followers Growth", "Total Post", "Total Engagement", "Views", "View Rate"]
+        col_order = ["Followers", "Followers Growth", "Total Post", "Total Engagement", "Views", "ER"]
     else:
         col_order = ["Followers", "Followers Growth", "Total Post", "Total Engagement", "Total Reach", "Total Impression", "ER"]
 
