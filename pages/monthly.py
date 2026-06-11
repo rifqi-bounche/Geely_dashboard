@@ -93,18 +93,12 @@ def build_monthly_table(df_full, platform_name):
     is_tiktok  = platform_lower == "tiktok"
     is_youtube = platform_lower == "youtube"
 
-    # Posts groupby
-    agg_dict = {
-        "Post_Amount": ("id", "count"),
-        "Impression":  ("Impression", "sum"),
-        "Engagement":  ("Engagement", "sum"),
-    }
-    if platform_lower not in ["tiktok", "youtube", "x"]:
-        agg_dict["Reach"] = ("Reach", "sum")
+    # Posts groupby — hanya hitung jumlah post
+    posts_grouped = df_posts.groupby("Month", sort=False).agg(
+        Post_Amount = ("id", "count"),
+    ).reset_index()
 
-    posts_grouped = df_posts.groupby("Month", sort=False).agg(**agg_dict).reset_index()
-
-    # Watch Rate for TikTok/YouTube
+    # Watch Rate for TikTok/YouTube (tetap dari post level karena ini avg per post)
     if is_tiktok and "Watch Rate" in df_posts.columns:
         wr = df_posts.groupby("Month", sort=False).agg(Watch_Rate=("Watch Rate", "mean")).reset_index()
         posts_grouped = pd.merge(posts_grouped, wr, on="Month", how="left")
@@ -112,10 +106,17 @@ def build_monthly_table(df_full, platform_name):
         wr = df_posts.groupby("Month", sort=False).agg(Watch_Rate=("Avg View Percentage", "mean")).reset_index()
         posts_grouped = pd.merge(posts_grouped, wr, on="Month", how="left")
 
-    followers_grouped = df_followers.groupby("Month", sort=False).agg(
-        Followers = ("Last Followers", "last"),
-        Growth    = ("Growth", "sum"),
-    ).reset_index()
+    # Followers groupby — account level metrics
+    agg_followers = {
+        "Followers":   ("Last Followers", "last"),
+        "Growth":      ("Growth", "sum"),
+        "Engagement":  ("account_interaction", "sum"),
+        "Impression":  ("account_impression", "sum"),
+    }
+    if platform_lower not in ["tiktok", "youtube", "x"]:
+        agg_followers["Reach"] = ("account_reach", "sum")
+
+    followers_grouped = df_followers.groupby("Month", sort=False).agg(**agg_followers).reset_index()
 
     merged = pd.merge(posts_grouped, followers_grouped, on="Month", how="outer")
     merged["Month_dt"] = pd.to_datetime(merged["Month"], format="%b-%Y", errors="coerce")
@@ -133,7 +134,6 @@ def build_monthly_table(df_full, platform_name):
             merged["View Rate"] = merged["Watch_Rate"].fillna(0).apply(lambda x: f"{float(str(x).replace('%','').strip()) if isinstance(x, str) else x:.2f}%")
             merged = merged.drop(columns=["Watch_Rate"])
         else:
-            # fallback: total interaction / followers
             merged["View Rate"] = (merged["Engagement"] / merged["Followers"].replace(0, pd.NA) * 100).round(2)
             merged["View Rate"] = merged["View Rate"].fillna(0).apply(lambda x: f"{x:.2f}%")
     else:
@@ -151,7 +151,7 @@ def build_monthly_table(df_full, platform_name):
         "Followers":   "Followers",
         "Growth":      "Followers Growth",
         "Reach":       "Total Reach",
-        "Impression":  "Total Impression" if not is_tiktok and not is_youtube else "Views",
+        "Impression":  "Views" if (is_tiktok or is_youtube) else "Total Impression",
         "Engagement":  "Total Engagement",
     })
 
@@ -671,9 +671,6 @@ def render_engagement_chart(df_full, platform_name):
 
     st.subheader(f"📈 {platform_name.title()} Engagement Growth")
 
-    # =====================================================
-    # FILTER PLATFORM
-    # =====================================================
     df_platform = df_full[
         df_full["Platform"]
         .astype(str)
@@ -682,10 +679,7 @@ def render_engagement_chart(df_full, platform_name):
         == platform_name.lower()
     ].copy()
 
-    # =====================================================
-    # FOLLOWERS ROW ONLY
-    # image kosong = recap
-    # =====================================================
+    # Followers row only (image kosong = account level)
     df_engagement = df_platform[
         df_platform["image"]
         .fillna("")
@@ -699,23 +693,18 @@ def render_engagement_chart(df_full, platform_name):
         st.warning(f"Tidak ada data engagement untuk {platform_name}")
         return
 
-    # =====================================================
-    # CLEAN ENGAGEMENT
-    # =====================================================
-    df_engagement["Engagement"] = (
-        df_engagement["Engagement"]
+    # Gunakan account_interaction sebagai engagement
+    df_engagement["account_interaction"] = (
+        df_engagement["account_interaction"]
         .astype(str)
         .str.replace(",", "", regex=False)
     )
 
-    df_engagement["Engagement"] = pd.to_numeric(
-        df_engagement["Engagement"],
+    df_engagement["account_interaction"] = pd.to_numeric(
+        df_engagement["account_interaction"],
         errors="coerce"
     )
 
-    # =====================================================
-    # DATE
-    # =====================================================
     df_engagement["Week_dt"] = pd.to_datetime(
         df_engagement["Week_code"]
         .astype(str)
@@ -724,25 +713,18 @@ def render_engagement_chart(df_full, platform_name):
         errors="coerce"
     )
 
-    # remove invalid dates
     df_engagement = df_engagement.dropna(subset=["Week_dt"])
 
     if df_engagement.empty:
         st.warning(f"Tidak ada Week_code valid untuk {platform_name}")
         return
 
-    # =====================================================
-    # SORT
-    # =====================================================
     df_engagement = df_engagement.sort_values("Week_dt")
 
-    # =====================================================
-    # WEEKLY
-    # =====================================================
     df_weekly = (
         df_engagement.groupby("Week_dt", sort=True)
         .agg(
-            Engagement=("Engagement", "sum")
+            Engagement=("account_interaction", "sum")
         )
         .reset_index()
         .sort_values("Week_dt")
@@ -752,9 +734,6 @@ def render_engagement_chart(df_full, platform_name):
         st.warning(f"Tidak ada data weekly engagement untuk {platform_name}")
         return
 
-    # =====================================================
-    # LABEL
-    # =====================================================
     week_labels = [f"Week {i+1}" for i in range(len(df_weekly))]
 
     engagement = (
@@ -768,9 +747,6 @@ def render_engagement_chart(df_full, platform_name):
         st.warning(f"Tidak ada nilai engagement untuk {platform_name}")
         return
 
-    # =====================================================
-    # CHART
-    # =====================================================
     fig, ax = plt.subplots(figsize=(9, 3.5))
 
     bars = ax.bar(
@@ -780,16 +756,11 @@ def render_engagement_chart(df_full, platform_name):
         width=0.5
     )
 
-    # garis 0
     ax.axhline(0, color="gray", linewidth=0.8)
 
-    # =====================================================
-    # LABELS
-    # =====================================================
     max_eng = max([abs(x) for x in engagement]) if engagement else 1
 
     for bar, val in zip(bars, engagement):
-
         ax.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height() + (max_eng * 0.02),
@@ -800,9 +771,6 @@ def render_engagement_chart(df_full, platform_name):
             color="#333"
         )
 
-    # =====================================================
-    # STYLE
-    # =====================================================
     ax.set_title(
         f"{platform_name.title()} Engagement Growth",
         fontsize=11,
@@ -819,9 +787,6 @@ def render_engagement_chart(df_full, platform_name):
 
     plt.tight_layout()
 
-    # =====================================================
-    # STREAMLIT
-    # =====================================================
     buf = io.BytesIO()
 
     plt.savefig(
@@ -838,154 +803,13 @@ def render_engagement_chart(df_full, platform_name):
 
     st.image(buf, use_container_width=True)
 
-def render_engagement_bar_chart(df_filtered, platform_name):
+def render_reach_chart(df_filtered, platform_name, metric="account_reach", label=None):
 
-    st.subheader(f"📈 {platform_name.title()} Engagement")
-
-    # =====================================================
-    # FILTER PLATFORM
-    # =====================================================
-    df_platform = df_filtered[
-        df_filtered["Platform"]
-        .astype(str)
-        .str.strip()
-        .str.lower()
-        == platform_name.lower()
-    ].copy()
-
-    # =====================================================
-    # POSTS ONLY
-    # =====================================================
-    df_posts = df_platform[
-        df_platform["image"].notna()
-    ].copy()
-
-    if df_posts.empty:
-        st.warning(f"Tidak ada data engagement untuk {platform_name}")
-        return
-
-    # =====================================================
-    # CLEAN ENGAGEMENT
-    # =====================================================
-    df_posts["Engagement"] = (
-        df_posts["Engagement"]
-        .astype(str)
-        .str.replace(",", "", regex=False)
-    )
-
-    df_posts["Engagement"] = pd.to_numeric(
-        df_posts["Engagement"],
-        errors="coerce"
-    )
-
-    # =====================================================
-    # DATE
-    # =====================================================
-    df_posts["Week_dt"] = pd.to_datetime(
-        df_posts["Week_code"],
-        dayfirst=True,
-        errors="coerce"
-    )
-
-    df_posts = df_posts.dropna(subset=["Week_dt"])
-
-    # =====================================================
-    # WEEKLY AGG
-    # =====================================================
-    df_weekly = (
-        df_posts.groupby("Week_dt", sort=True)
-        .agg(Engagement=("Engagement", "sum"))
-        .reset_index()
-    )
-
-    if df_weekly.empty:
-        st.warning(f"Tidak ada data weekly engagement untuk {platform_name}")
-        return
-
-    # =====================================================
-    # LABELS
-    # =====================================================
-    week_labels = [f"Week {i+1}" for i in range(len(df_weekly))]
-
-    vals = (
-        df_weekly["Engagement"]
-        .fillna(0)
-        .astype(int)
-        .tolist()
-    )
-
-    # =====================================================
-    # CHART
-    # =====================================================
-    fig, ax = plt.subplots(figsize=(9, 4))
-
-    bars = ax.bar(
-        week_labels,
-        vals,
-        color="#4A90D9",
-        width=0.55
-    )
-
-    # =====================================================
-    # VALUE LABEL
-    # =====================================================
-    max_val = max(vals) if vals else 1
-
-    for bar, val in zip(bars, vals):
-
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + (max_val * 0.02),
-            f"{val:,}",
-            ha="center",
-            va="bottom",
-            fontsize=8,
-            color="#333"
-        )
-
-    # =====================================================
-    # STYLE
-    # =====================================================
-    ax.set_ylabel("Engagement", fontsize=9)
-
-    ax.set_title(
-        f"{platform_name.title()} Engagement",
-        fontsize=11,
-        fontweight="bold",
-        pad=10
-    )
-
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-    ax.yaxis.set_major_formatter(
-        mticker.FuncFormatter(lambda v, _: f"{int(v):,}")
-    )
-
-    plt.tight_layout()
-
-    # =====================================================
-    # STREAMLIT
-    # =====================================================
-    buf = io.BytesIO()
-
-    plt.savefig(
-        buf,
-        format="png",
-        dpi=150,
-        bbox_inches="tight",
-        facecolor="white"
-    )
-
-    plt.close()
-
-    buf.seek(0)
-
-    st.image(buf, use_container_width=True)
-
-def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
-
-    label_map    = {"Reach": "Reach", "Impression": "Impression", "Views": "Views"}
+    label_map    = {
+        "account_reach":       "Reach",
+        "account_impression":  "Impression",
+        "account_interaction": "Engagement",
+    }
     metric_label = label if label else label_map.get(metric, metric)
 
     st.subheader(f"📈 {platform_name} {metric_label}")
@@ -994,18 +818,31 @@ def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
         df_filtered["Platform"].astype(str).str.strip().str.lower() == platform_name.lower()
     ].copy()
 
-    df_posts = df_platform[df_platform["image"].notna()].copy()
+    # Account level = image kosong
+    df_account = df_platform[
+        df_platform["image"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .isin(["", "nan", "none", "null"])
+    ].copy()
 
-    if df_posts.empty:
+    if df_account.empty:
         st.warning(f"Tidak ada data {metric_label} untuk {platform_name}")
         return
 
-    df_posts["Week_dt"] = pd.to_datetime(
-        df_posts["Week_code"], dayfirst=True, errors="coerce"
+    df_account["Week_dt"] = pd.to_datetime(
+        df_account["Week_code"], dayfirst=True, errors="coerce"
+    )
+
+    df_account[metric] = pd.to_numeric(
+        df_account[metric].astype(str).str.replace(",", "", regex=False),
+        errors="coerce"
     )
 
     df_weekly = (
-        df_posts.groupby("Week_dt", sort=True)
+        df_account.groupby("Week_dt", sort=True)
         .agg(Value=(metric, "sum"))
         .reset_index()
     )
@@ -1014,14 +851,12 @@ def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
         st.warning(f"Tidak ada data weekly {metric_label} untuk {platform_name}")
         return
 
-    # =====================================================
-    # FILL MISSING WEEKS
-    # =====================================================
+    # Fill missing weeks
     all_weeks = pd.to_datetime(
         df_filtered["Week_code"].dropna().unique(),
         dayfirst=True, errors="coerce"
     )
-    all_weeks   = sorted([w for w in all_weeks if pd.notna(w)])
+    all_weeks    = sorted([w for w in all_weeks if pd.notna(w)])
     df_all_weeks = pd.DataFrame({"Week_dt": all_weeks})
 
     df_weekly = pd.merge(df_all_weeks, df_weekly, on="Week_dt", how="left")
@@ -1030,9 +865,7 @@ def render_reach_chart(df_filtered, platform_name, metric="Reach", label=None):
     week_labels = [f"Week {i+1}" for i in range(len(df_weekly))]
     vals        = df_weekly["Value"].tolist()
 
-    # =====================================================
-    # CHART
-    # =====================================================
+    # Chart
     fig, ax = plt.subplots(figsize=(9, 4))
 
     ax.plot(week_labels, vals, color="#4A90D9", linewidth=2.5, marker="o",
@@ -1067,7 +900,7 @@ st.header("📸 Instagram")
 st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "instagram"), use_container_width=True)
 render_followers_chart(df, "Instagram")
-render_engagement_bar_chart(df_filtered, "instagram")
+render_engagement_chart(df_filtered, "instagram")
 
 render_reach_chart(df_filtered, "Instagram")
 
@@ -1114,7 +947,7 @@ st.dataframe(build_monthly_table(df, "Tiktok"), use_container_width=True)
 # TikTok
 
 render_followers_chart(df, "Tiktok")
-render_reach_chart(df_filtered, "Tiktok", metric="Impression", label="Views")
+render_reach_chart(df_filtered, "Tiktok", metric="account_impression", label="Views")
 ai_summary_platform("Tiktok", df_filtered, df, key_suffix="tt_monthly")
 
 # =========================================================
@@ -1333,7 +1166,7 @@ st.header("▶️ YouTube")
 st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "youtube"), use_container_width=True)
 render_followers_chart(df, "YouTube")
-render_reach_chart(df_filtered, "Youtube", metric="Impression", label="Views")
+render_reach_chart(df_filtered, "Youtube", metric="account_impression", label="Views")
 ai_summary_platform("YouTube", df_filtered, df, key_suffix="yt_monthly")
 
 # =========================================================
@@ -1495,7 +1328,7 @@ st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "Linkedin"), use_container_width=True)
 
 render_followers_chart(df, "Linkedin")
-render_reach_chart(df_filtered, "LinkedIn", metric="Impression")
+render_reach_chart(df_filtered, "LinkedIn", metric="account_impression", label="Impression")
 ai_summary_platform("LinkedIn", df_filtered, df, key_suffix="LinkedIn_monthly")
 
 # =========================================================
@@ -1636,7 +1469,7 @@ st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "X"), use_container_width=True)
 
 render_followers_chart(df, "X")
-render_reach_chart(df_filtered, "X",        metric="Impression")
+render_reach_chart(df_filtered, "X",metric="account_impression",label="Impression")
 # =========================================================
 # TOP 3 X POSTS BY ENGAGEMENT
 # =========================================================
