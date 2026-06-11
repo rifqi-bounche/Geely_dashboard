@@ -137,9 +137,11 @@ def build_monthly_table(df_full, platform_name):
             merged["View Rate"] = (merged["Engagement"] / merged["Followers"].replace(0, pd.NA) * 100).round(2)
             merged["View Rate"] = merged["View Rate"].fillna(0).apply(lambda x: f"{x:.2f}%")
     else:
-        merged["ER"] = (merged["Engagement"] / merged["Impression"] * 100).round(2)
+        if "Reach" in merged.columns and merged["Reach"].replace(0, pd.NA).notna().any():
+            merged["ER"] = (merged["Engagement"] / merged["Reach"].replace(0, pd.NA) * 100).round(2)
+        else:
+            merged["ER"] = (merged["Engagement"] / merged["Impression"].replace(0, pd.NA) * 100).round(2)
         merged["ER"] = merged["ER"].fillna(0).apply(lambda x: f"{x:.2f}%")
-
     # Format numbers
     for col in ["Post_Amount", "Followers", "Growth", "Reach", "Impression", "Engagement"]:
         if col in merged.columns:
