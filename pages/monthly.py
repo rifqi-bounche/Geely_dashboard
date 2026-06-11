@@ -559,20 +559,22 @@ Format: use bullet points, use relevant emojis, keep it concise and to the point
             except Exception as e:
                 st.error(f"Failed to generate summary: {e}")
 
-def render_followers_chart(df_full, platform_name):
+def render_followers_chart(df_filtered, platform_name):
 
     platform_name = str(platform_name)
 
     st.subheader(f"📈 {platform_name.title()} Followers Growth")
 
-    df_platform = df_full[
-        df_full["Platform"]
+    # Filter platform
+    df_platform = df_filtered[
+        df_filtered["Platform"]
         .astype(str)
         .str.strip()
         .str.lower()
         == platform_name.lower()
     ].copy()
 
+    # Account level = image kosong
     df_followers = df_platform[
         df_platform["image"]
         .fillna("")
@@ -586,40 +588,22 @@ def render_followers_chart(df_full, platform_name):
         st.warning(f"Tidak ada data followers untuk {platform_name}")
         return
 
+    # Convert growth ke numeric
     df_followers["Growth"] = pd.to_numeric(
-        df_followers["Growth"].astype(str).str.replace(",", "", regex=False),
+        df_followers["Growth"]
+        .astype(str)
+        .str.replace(",", "", regex=False),
         errors="coerce"
     )
 
+    # Convert week ke datetime (sama seperti render_reach_chart)
     df_followers["Week_dt"] = pd.to_datetime(
-        df_followers["Week_code"].astype(str).str.strip(),
+        df_followers["Week_code"],
         dayfirst=True,
         errors="coerce"
     )
 
-    df_followers = df_followers.dropna(subset=["Week_dt"])
-
-    if df_followers.empty:
-        st.warning(f"Tidak ada Week_code valid untuk {platform_name}")
-        return
-    
-    # =====================================================
-    # FILTER BY DATE RANGE
-    # Week_code = END OF WEEK (Sunday)
-    # =====================================================
-    selected_start = pd.to_datetime(start_date).normalize()
-    selected_end   = pd.to_datetime(end_date).normalize()
-
-    df_followers = df_followers[
-        (df_followers["Week_dt"].dt.normalize() >= selected_start) &
-        (df_followers["Week_dt"].dt.normalize() <= selected_end)
-    ]
-    if df_followers.empty:
-        st.warning(f"Tidak ada data followers untuk {platform_name} di periode ini.")
-        return
-
-    df_followers = df_followers.sort_values("Week_dt")
-
+    # Group per week
     df_weekly = (
         df_followers.groupby("Week_dt", sort=True)
         .agg(Growth=("Growth", "sum"))
@@ -630,35 +614,90 @@ def render_followers_chart(df_full, platform_name):
         st.warning(f"Tidak ada data weekly growth untuk {platform_name}")
         return
 
+    # Ambil semua week dari dataset
+    all_weeks = pd.to_datetime(
+        df_filtered["Week_code"].dropna().unique(),
+        dayfirst=True,
+        errors="coerce"
+    )
+
+    all_weeks = sorted([w for w in all_weeks if pd.notna(w)])
+
+    df_all_weeks = pd.DataFrame({"Week_dt": all_weeks})
+
+    # Fill missing week dengan 0
+    df_weekly = pd.merge(
+        df_all_weeks,
+        df_weekly,
+        on="Week_dt",
+        how="left"
+    )
+
+    df_weekly["Growth"] = df_weekly["Growth"].fillna(0).astype(int)
+
     week_labels = [f"Week {i+1}" for i in range(len(df_weekly))]
-    growth      = df_weekly["Growth"].fillna(0).astype(int).tolist()
+    growth = df_weekly["Growth"].tolist()
 
     if not growth:
         st.warning(f"Tidak ada nilai growth untuk {platform_name}")
         return
 
-    fig, ax = plt.subplots(figsize=(9, 3.5))
-    bars     = ax.bar(week_labels, growth, color="#5A8CB0", width=0.5)
-    max_growth = max([abs(x) for x in growth]) if growth else 1
+    # Plot
+    fig, ax = plt.subplots(figsize=(9, 4))
+
+    bars = ax.bar(
+        week_labels,
+        growth,
+        color="#5A8CB0",
+        width=0.5
+    )
+
+    max_growth = max(abs(x) for x in growth) if growth else 1
 
     ax.axhline(0, color="gray", linewidth=0.8)
 
+    # Label di atas bar
     for bar, val in zip(bars, growth):
         ax.text(
             bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + (max_growth * 0.02),
-            f"{val:,}", ha="center", va="bottom", fontsize=8, color="#333"
+            bar.get_height() + max_growth * 0.02,
+            f"{val:,}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="#333"
         )
 
-    ax.set_title(f"{platform_name.title()} Followers Growth", fontsize=11, fontweight="bold", pad=10)
+    ax.set_xticks(range(len(week_labels)))
+    ax.set_xticklabels(week_labels, fontsize=9)
+
+    ax.set_ylabel("Followers Growth", fontsize=9)
+    ax.set_title(
+        f"{platform_name.title()} Followers Growth",
+        fontsize=11,
+        fontweight="bold",
+        pad=10
+    )
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
+
+    ax.yaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda v, _: f"{int(v):,}")
+    )
+
     plt.tight_layout()
 
     buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.savefig(
+        buf,
+        format="png",
+        dpi=150,
+        bbox_inches="tight",
+        facecolor="white"
+    )
     plt.close()
+
     buf.seek(0)
     st.image(buf, use_container_width=True)
 
@@ -897,7 +936,7 @@ st.header("📸 Instagram")
 
 st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "instagram"), use_container_width=True)
-render_followers_chart(df, "Instagram")
+render_followers_chart(df_filtered, "Instagram")
 render_engagement_chart(df_filtered, "instagram")
 
 render_reach_chart(df_filtered, "Instagram")
@@ -944,7 +983,7 @@ st.dataframe(build_monthly_table(df, "Tiktok"), use_container_width=True)
 
 # TikTok
 
-render_followers_chart(df, "Tiktok")
+render_followers_chart(df_filtered, "Tiktok")
 render_reach_chart(df_filtered, "Tiktok", metric="account_impression", label="Views")
 ai_summary_platform("Tiktok", df_filtered, df, key_suffix="tt_monthly")
 
@@ -1108,7 +1147,7 @@ st.header("👥 Facebook")
 
 st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "facebook"), use_container_width=True)
-render_followers_chart(df, "Facebook")
+render_followers_chart(df_filtered, "Facebook")
 render_reach_chart(df_filtered, "Facebook")
 ai_summary_platform("Facebook", df_filtered, df, key_suffix="fb_monthly")
 
@@ -1163,7 +1202,7 @@ st.header("▶️ YouTube")
 
 st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "youtube"), use_container_width=True)
-render_followers_chart(df, "YouTube")
+render_followers_chart(df_filtered, "YouTube")
 render_reach_chart(df_filtered, "Youtube", metric="account_impression", label="Views")
 ai_summary_platform("YouTube", df_filtered, df, key_suffix="yt_monthly")
 
@@ -1325,7 +1364,7 @@ st.header("📸 Linkedin")
 st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "Linkedin"), use_container_width=True)
 
-render_followers_chart(df, "Linkedin")
+render_followers_chart(df_filtered, "Linkedin")
 render_reach_chart(df_filtered, "LinkedIn", metric="account_impression", label="Impression")
 ai_summary_platform("LinkedIn", df_filtered, df, key_suffix="LinkedIn_monthly")
 
@@ -1466,7 +1505,7 @@ st.header("📸 X")
 st.subheader("📋 Monthly Breakdown")
 st.dataframe(build_monthly_table(df, "X"), use_container_width=True)
 
-render_followers_chart(df, "X")
+render_followers_chart(df_filtered, "X")
 render_reach_chart(df_filtered, "X",metric="account_impression",label="Impression")
 # =========================================================
 # TOP 3 X POSTS BY ENGAGEMENT
