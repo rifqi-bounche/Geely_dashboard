@@ -170,28 +170,22 @@ def build_monthly_table(df_full, platform_name):
     # Kolom pertama
     summary["Month"] = "🟦 TOTAL"
 
-    # Total semua metric
     for col in merged.columns:
-        if col == "Month":
+        if col in ("Month", "ER"):
             continue
 
-        if col == "ER":
-            continue
+        try:
+            total = (
+                merged[col]
+                .astype(str)
+                .str.replace(",", "", regex=False)
+                .astype(float)
+                .sum()
+            )
+            summary[col] = f"{int(total):,}"
+        except Exception:
+            summary[col] = ""
 
-        if col in merged.columns:
-            if merged[col].dtype == object:
-                try:
-                    total = (
-                        merged[col]
-                        .str.replace(",", "", regex=False)
-                        .astype(float)
-                        .sum()
-                    )
-                    summary[col] = f"{int(total):,}"
-                except:
-                    summary[col] = ""
-            else:
-                summary[col] = merged[col].sum()
 
     # Average ER
     er_avg = (
