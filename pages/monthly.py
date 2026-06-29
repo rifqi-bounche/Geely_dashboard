@@ -162,6 +162,52 @@ def build_monthly_table(df_full, platform_name):
     col_order = [c for c in col_order if c in merged.columns]
     merged = merged[["Month"] + col_order]
 
+    # =====================================================
+    # SUMMARY ROW
+    # =====================================================
+    summary = {}
+
+    # Kolom pertama
+    summary["Month"] = "🟦 TOTAL"
+
+    # Total semua metric
+    for col in merged.columns:
+        if col == "Month":
+            continue
+
+        if col == "ER":
+            continue
+
+        if col in merged.columns:
+            if merged[col].dtype == object:
+                try:
+                    total = (
+                        merged[col]
+                        .str.replace(",", "", regex=False)
+                        .astype(float)
+                        .sum()
+                    )
+                    summary[col] = f"{int(total):,}"
+                except:
+                    summary[col] = ""
+            else:
+                summary[col] = merged[col].sum()
+
+    # Average ER
+    er_avg = (
+        merged["ER"]
+        .str.replace("%", "", regex=False)
+        .astype(float)
+        .mean()
+    )
+
+    summary["ER"] = f"{er_avg:.2f}%"
+
+    # Tambahkan sebagai baris terakhir
+    merged = pd.concat(
+        [merged, pd.DataFrame([summary])],
+        ignore_index=True
+    )
     return merged.set_index("Month")
 
 
@@ -237,12 +283,16 @@ def build_content_breakdown(df_full, platform_name):
     # FINAL DF
     # =====================================================
     df_posts = df_posts[cols]
+
+    # Simpan average ER
+    avg_er = df_posts["ER_raw"].mean()
+
+    # Baru sort & hapus ER_raw
     df_posts = (
         df_posts
         .sort_values("ER_raw", ascending=False)
         .drop(columns=["ER_raw"])
     )
-
     # =====================================================
     # RENAME
     # =====================================================
@@ -284,6 +334,44 @@ def build_content_breakdown(df_full, platform_name):
         k: v for k, v in column_config.items()
         if k in df.columns
     }
+    
+    # =====================================================
+    # SUMMARY ROW
+    # =====================================================
+    summary = {}
+
+    # Tampilkan TOTAL di kolom pertama
+    if "Date" in df.columns:
+        summary["Date"] = "🟦 TOTAL"
+
+    # Kosongkan kolom text lainnya
+    for col in ["Link", "Type", "Boosted", "Message"]:
+        if col in df.columns:
+            summary[col] = ""
+
+    # Total metric
+    metric_cols = [
+        impression_label,
+        "Reach",
+        "Likes",
+        "Comments",
+        "Share",
+        "Save",
+        "Total Engagement",
+    ]
+
+    for col in metric_cols:
+        if col in df.columns:
+            summary[col] = df[col].sum()
+    
+    # Average ER
+    summary["ER"] = f"{avg_er:.2f}%"
+
+    # Tambahkan sebagai baris terakhir
+    df = pd.concat(
+        [df, pd.DataFrame([summary])],
+        ignore_index=True
+    )
 
     # =====================================================
     # DISPLAY
@@ -291,8 +379,8 @@ def build_content_breakdown(df_full, platform_name):
     st.dataframe(
         df,
         use_container_width=True,
+        hide_index=True,
         column_config=column_config,
-        hide_index=True
     )
 def render_post_embed(post_url):
     try:
