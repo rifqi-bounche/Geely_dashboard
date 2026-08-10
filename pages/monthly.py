@@ -128,16 +128,67 @@ def build_monthly_table(df_full, platform_name):
     if "Reach" in merged.columns:
         merged["Reach"] = merged["Reach"].fillna(0)
 
-    # ER
+    # =====================================================
+    # TOTAL ER CALCULATION
+    # =====================================================
+
+    total_engagement = pd.to_numeric(
+        merged["Engagement"], errors="coerce"
+    ).fillna(0).sum()
+
     if is_tiktok or is_youtube:
-        merged["ER"] = (merged["Engagement"] / merged["Impression"].replace(0, pd.NA) * 100).round(2)
-        merged["ER"] = merged["ER"].fillna(0).apply(lambda x: f"{x:.2f}%")
+        total_denominator = pd.to_numeric(
+            merged["Impression"], errors="coerce"
+        ).fillna(0).sum()
     else:
         if "Reach" in merged.columns and merged["Reach"].replace(0, pd.NA).notna().any():
-            merged["ER"] = (merged["Engagement"] / merged["Reach"].replace(0, pd.NA) * 100).round(2)
+            total_denominator = pd.to_numeric(
+                merged["Reach"], errors="coerce"
+            ).fillna(0).sum()
         else:
-            merged["ER"] = (merged["Engagement"] / merged["Impression"].replace(0, pd.NA) * 100).round(2)
-        merged["ER"] = merged["ER"].fillna(0).apply(lambda x: f"{x:.2f}%")
+            total_denominator = pd.to_numeric(
+                merged["Impression"], errors="coerce"
+            ).fillna(0).sum()
+
+    if total_denominator > 0:
+        total_er = (total_engagement / total_denominator) * 100
+    else:
+        total_er = 0
+    # ER
+    if is_tiktok or is_youtube:
+        merged["ER"] = (
+            merged["Engagement"]
+            .div(merged["Impression"].replace(0, pd.NA))
+            * 100
+        )
+
+        merged["ER"] = (
+            pd.to_numeric(merged["ER"], errors="coerce")
+            .fillna(0)
+            .round(2)
+            .apply(lambda x: f"{x:.2f}%")
+        )
+
+    else:
+        if "Reach" in merged.columns and merged["Reach"].replace(0, pd.NA).notna().any():
+            merged["ER"] = (
+                merged["Engagement"]
+                .div(merged["Reach"].replace(0, pd.NA))
+                * 100
+            )
+        else:
+            merged["ER"] = (
+                merged["Engagement"]
+                .div(merged["Impression"].replace(0, pd.NA))
+                * 100
+            )
+
+        merged["ER"] = (
+            pd.to_numeric(merged["ER"], errors="coerce")
+            .fillna(0)
+            .round(2)
+            .apply(lambda x: f"{x:.2f}%")
+        )
 
     # Format numbers
     for col in ["Post_Amount", "Followers", "Growth", "Reach", "Impression", "Engagement"]:
@@ -182,26 +233,21 @@ def build_monthly_table(df_full, platform_name):
                 .astype(float)
                 .sum()
             )
+
             summary[col] = f"{int(total):,}"
+
         except Exception:
             summary[col] = ""
 
-
-    # Average ER
-    er_avg = (
-        merged["ER"]
-        .str.replace("%", "", regex=False)
-        .astype(float)
-        .mean()
-    )
-
-    summary["ER"] = f"{er_avg:.2f}%"
+    # Total ER
+    summary["ER"] = f"{total_er:.2f}%"
 
     # Tambahkan sebagai baris terakhir
     merged = pd.concat(
         [merged, pd.DataFrame([summary])],
         ignore_index=True
     )
+
     return merged.set_index("Month")
 
 
